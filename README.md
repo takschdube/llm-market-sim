@@ -171,24 +171,6 @@ LLM-Populated Markets: A Critical Concentration Threshold".
 }
 ```
 
-## Publications
-
-Papers and preprints that use llm-market-sim. To add your work, open an issue or
-submit a pull request.
-
-- When Is Delegated Play Truthful? Within-Range Regret and the Limits of Aligned
-  Proxies. Uses the `delegation` module to validate the truth-to-proxy identity,
-  the trilemma, and the certification bounds.
-
-```bibtex
-@misc{dube2026delegated,
-  author = {Dube, Taksch},
-  title  = {When Is Delegated Play Truthful? {Within}-Range Regret and the Limits of Aligned Proxies},
-  year   = {2026},
-  note   = {Working paper; WINE 2026 submission}
-}
-```
-
 ## License
 
 Apache License 2.0. See `LICENSE`.
