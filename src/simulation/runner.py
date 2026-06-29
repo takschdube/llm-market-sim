@@ -12,30 +12,48 @@ from src.agents import (
     ReactAgent,
     CoTAgent,
 )
-from src.market.mechanism import DoubleAuction
+from src.market.mechanism import DoubleAuction, Mechanism, get_mechanism
 from src.simulation.valuations import ValuationScheme, LinearValuationScheme
 
 
 class Simulation:
-    def __init__(self, agents: List[BaseAgent], num_rounds: int = 20, parallel: bool = True,
-                 replenish_endowments: bool = True):
+    def __init__(
+        self,
+        agents: List[BaseAgent],
+        num_rounds: int = 20,
+        parallel: bool = True,
+        replenish_endowments: bool = True,
+        mechanism: str = "pairwise_midpoint",
+        memoryless: bool = False,
+    ):
         """
         Initialize simulation.
 
         Args:
-            agents: List of trading agents
-            num_rounds: Number of trading rounds
-            parallel: Whether to run LLM agents in parallel
+            agents: List of trading agents.
+            num_rounds: Number of trading rounds.
+            parallel: Whether to run LLM agents in parallel.
             replenish_endowments: If True, reset endowments each round (Gode & Sunder style).
                                   If False, endowments persist across rounds (exhaustion dynamics).
+            mechanism: Market mechanism identifier. One of
+                       "pairwise_midpoint" (default, matches the cognitive-monoculture
+                       experiments to date), "uniform_price_call" (Definition 1 of the
+                       paper), or "double_auction" (alias for pairwise_midpoint).
+                       Used by the mechanism-invariance experiment.
+            memoryless: If True, each round is independent: prior trade history and
+                       last clearing price are not exposed to agents, and per-agent
+                       history is cleared at the start of every round. Used by the
+                       memoryless ablation that tests Theorem 1 (ICC mechanism).
         """
         self.agents = agents
-        self.market = DoubleAuction()
+        self.market: Mechanism = get_mechanism(mechanism)
+        self.mechanism_name = mechanism
         self.num_rounds = num_rounds
         self.round_data = []
         self.round_results = []  # For DatasetExporter compatibility
         self.parallel = parallel
         self.replenish_endowments = replenish_endowments
+        self.memoryless = memoryless
 
         # Store initial endowments for replenishment
         self._initial_endowments = {
@@ -52,12 +70,30 @@ class Simulation:
         else:
             return self._run_sync()
 
+    def _build_market_info(self, round_num: int) -> dict:
+        """Build the market_info dict surfaced to agents this round.
+
+        In memoryless mode, suppresses last clearing price and order book so
+        each round is an independent draw. Decision logs continue to capture
+        per-round behavior for analysis.
+        """
+        if self.memoryless:
+            return {
+                "round": round_num,
+                "bids": [],
+                "asks": [],
+                "last_price": None,
+                "mechanism": self.mechanism_name,
+            }
+        market_info = self.market.get_market_info()
+        market_info["round"] = round_num
+        return market_info
+
     def _run_sync(self):
         """Synchronous execution - one agent at a time."""
         for round_num in range(1, self.num_rounds + 1):
             print(f"Round {round_num}")
-            market_info = self.market.get_market_info()
-            market_info["round"] = round_num
+            market_info = self._build_market_info(round_num)
 
             # Collect orders from all agents
             for agent in self.agents:
@@ -73,8 +109,7 @@ class Simulation:
         """Async execution - all agents decide in parallel."""
         for round_num in range(1, self.num_rounds + 1):
             print(f"Round {round_num}")
-            market_info = self.market.get_market_info()
-            market_info["round"] = round_num
+            market_info = self._build_market_info(round_num)
 
             # Collect orders from all agents IN PARALLEL
             async def get_order(agent):
@@ -177,6 +212,11 @@ class Simulation:
             # Reset ZI agents' traded flag for new round
             if isinstance(agent, ZIAgent):
                 agent.reset_for_new_round()
+
+            # Memoryless ablation: drop trade history so each round is independent.
+            # Decision logs are preserved on the agent for downstream analysis.
+            if self.memoryless:
+                agent.history = []
 
     def get_logs_flat(self) -> list:
         """

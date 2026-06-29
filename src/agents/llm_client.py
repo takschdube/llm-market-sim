@@ -135,7 +135,7 @@ class LLMClient:
         else:
             raise ValueError(f"Unknown provider: {self.provider}")
 
-    def call(self, system: str, user: str, max_tokens: int = 256) -> str:
+    def call(self, system: str, user: str, max_tokens: int = 256, temperature: float = 1.0) -> str:
         """
         Make an LLM call and return the response text.
 
@@ -143,6 +143,7 @@ class LLMClient:
             system: System prompt (instructions)
             user: User message (the actual query)
             max_tokens: Maximum tokens in response
+            temperature: Sampling temperature (default 1.0 for stochastic outputs)
 
         Returns:
             Response text from the model
@@ -151,6 +152,7 @@ class LLMClient:
             response = self._client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
+                temperature=temperature,
                 system=system,
                 messages=[{"role": "user", "content": user}]
             )
@@ -160,6 +162,7 @@ class LLMClient:
             response = self._client.chat.completions.create(
                 model=self.model,
                 max_tokens=max_tokens,
+                temperature=temperature,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user}
@@ -175,7 +178,8 @@ class LLMClient:
             response = self._client.generate_content(
                 combined_prompt,
                 generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=max_tokens
+                    max_output_tokens=max_tokens,
+                    temperature=temperature
                 ),
                 safety_settings={
                     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
@@ -220,7 +224,7 @@ class LLMClient:
             # We'll use the sync client in an executor
             pass
 
-    async def call_async(self, system: str, user: str, max_tokens: int = 256) -> str:
+    async def call_async(self, system: str, user: str, max_tokens: int = 256, temperature: float = 1.0) -> str:
         """
         Make an async LLM call and return the response text.
 
@@ -228,6 +232,7 @@ class LLMClient:
             system: System prompt (instructions)
             user: User message (the actual query)
             max_tokens: Maximum tokens in response
+            temperature: Sampling temperature (default 1.0 for stochastic outputs)
 
         Returns:
             Response text from the model
@@ -238,6 +243,7 @@ class LLMClient:
             response = await self._async_client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
+                temperature=temperature,
                 system=system,
                 messages=[{"role": "user", "content": user}]
             )
@@ -247,6 +253,7 @@ class LLMClient:
             response = await self._async_client.chat.completions.create(
                 model=self.model,
                 max_tokens=max_tokens,
+                temperature=temperature,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user", "content": user}
@@ -259,7 +266,7 @@ class LLMClient:
             import asyncio
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(
-                None, lambda: self.call(system, user, max_tokens)
+                None, lambda: self.call(system, user, max_tokens, temperature)
             )
 
         else:

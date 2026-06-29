@@ -1,9 +1,24 @@
 [project]
 name = "llm-market-sim"
-version = "0.1.0"
-description = "LLM agent market simulation for studying emergent price dynamics"
+version = "0.2.0-dev"
+description = "Design and governance library for multi-AI-agent markets: composable mechanisms, LLM + classical strategies, cost-bounded studies, audit-schema traces, cognitive monoculture metrics"
 readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Taksch Dube", email = "tdube@dubeinternational.com" },
+]
+keywords = [
+    "llm-agents",
+    "agent-based-modeling",
+    "market-design",
+    "mechanism-design",
+    "call-auction",
+    "cognitive-monoculture",
+    "intraclass-correlation",
+    "ai-governance",
+    "multi-agent-systems",
+]
 dependencies = [
     "anthropic>=0.75.0",
     "google-generativeai>=0.8.0",
@@ -12,6 +27,7 @@ dependencies = [
     "numpy>=2.0.2",
     "openai>=2.14.0",
     "pandas>=2.3.3",
+    "pydantic>=2.7",
     "python-dotenv>=1.2.1",
     "scipy>=1.13.1",
     "seaborn>=0.13.2",
@@ -22,6 +38,15 @@ dev = [
     "pytest>=8.0.0",
     "pytest-cov>=4.1.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Public API package plus the internal engine namespace. Both ship in the
+# wheel; users import from `llm_market_sim`, internal code lives under `src`.
+packages = ["llm_market_sim", "src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -32,20 +32,20 @@ class TestLinearValuationScheme:
         assert len(profiles) == 4
 
     def test_default_buyer_valuations(self):
-        """Default: buyers at 20, 22, 24, ..."""
+        """Default: buyers at 60, 65, 70, ... (paper valuation scheme)."""
         scheme = LinearValuationScheme()
         profiles = scheme.generate_profiles(n_buyers=3, n_sellers=0)
 
         valuations = [p.valuation for p in profiles]
-        assert valuations == [20.0, 22.0, 24.0]
+        assert valuations == [60.0, 65.0, 70.0]
 
     def test_default_seller_valuations(self):
-        """Default: sellers at 5, 7, 9, ..."""
+        """Default: sellers at 5, 10, 15, ... (paper valuation scheme)."""
         scheme = LinearValuationScheme()
         profiles = scheme.generate_profiles(n_buyers=0, n_sellers=3)
 
         valuations = [p.valuation for p in profiles]
-        assert valuations == [5.0, 7.0, 9.0]
+        assert valuations == [5.0, 10.0, 15.0]
 
     def test_buyers_have_money_endowment(self):
         scheme = LinearValuationScheme()

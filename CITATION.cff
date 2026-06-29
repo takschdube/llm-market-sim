@@ -1,0 +1,47 @@
+cff-version: 1.2.0
+message: |
+  If you use llm-market-sim in academic work, please cite both the software
+  release (this file) and the accompanying paper. Cite the paper for the
+  theoretical results (intraclass correlation, critical threshold c*) and
+  the software release for the simulator, mechanism implementations, ICC
+  estimator, and reproducibility artifacts.
+title: "llm-market-sim: A research library for simulating markets populated by LLM and zero-intelligence agents"
+type: software
+authors:
+  - family-names: Dube
+    given-names: Taksch
+    affiliation: Kent State University
+    email: tdube@dubeinternational.com
+repository-code: "https://github.com/takschdube/llm-market-sim"
+license: MIT
+version: 0.2.0-dev
+date-released: "2026-06-15"
+keywords:
+  - llm-agents
+  - agent-based-modeling
+  - market-design
+  - mechanism-design
+  - call-auction
+  - cognitive-monoculture
+  - intraclass-correlation
+  - egta
+abstract: |
+  llm-market-sim is a Python research library for simulating markets populated
+  by large-language-model agents and zero-intelligence traders. It implements
+  a pluggable Mechanism abstract base class with both pairwise-midpoint and
+  uniform-price call clearing rules, a multi-provider LLM client supporting
+  DeepSeek, Anthropic, OpenAI, and Google, an intraclass-correlation estimator
+  for the architectural-correlation parameter rho_A, and a critical-threshold
+  calculator c* = 1 / sqrt(rho_A * n) derived in the accompanying paper. It is
+  the simulation backbone for cognitive-monoculture research and is designed
+  to integrate as a Mechanism component with broader substrates such as
+  Concordia, Magentic Marketplace, and ABIDES-MARL.
+preferred-citation:
+  type: article
+  authors:
+    - family-names: Dube
+      given-names: Taksch
+      affiliation: Kent State University
+  title: "Cognitive Monoculture in AI-Populated Markets: Correlated Decision-Making and Systemic Risk"
+  year: 2026
+  notes: "arXiv preprint; EC 2027 submission"

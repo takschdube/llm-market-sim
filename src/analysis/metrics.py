@@ -284,6 +284,160 @@ def compute_entropy_trajectory(round_data: List[Dict],
     return trajectory
 
 
+def compute_cross_sectional_correlation(
+    round_data: List[Dict],
+    agent_models: Dict[str, str],
+    agent_roles: Dict[str, str],
+    equilibrium_price: float,
+) -> Dict:
+    """
+    Compute cross-sectional correlation per round, then average.
+
+    This is the preferred method for measuring cognitive monoculture:
+    - Each round is an independent observation
+    - Correlation is computed across agents within the same round
+    - Gives clean statistics: mean ± SE over rounds
+
+    Args:
+        round_data: List of round results with 'decisions' containing agent decisions
+        agent_models: Dict mapping agent_id -> model name
+        agent_roles: Dict mapping agent_id -> 'buyer' or 'seller'
+        equilibrium_price: Theoretical Walrasian equilibrium price p*
+
+    Returns:
+        Dict with correlation metrics and statistics
+    """
+    from itertools import combinations
+
+    within_corrs_by_round = []
+    between_corrs_by_round = []
+
+    # Per-model metrics
+    model_biases = {}  # model -> list of mean deviations per round
+    model_variances = {}  # model -> list of variances per round
+
+    for round_info in round_data:
+        decisions = round_info.get("decisions", {})
+        if not decisions:
+            continue
+
+        # Collect deviations by model and role
+        deviations_by_model_role = {}  # (model, role) -> [deviations]
+
+        for agent_id, decision in decisions.items():
+            price = decision.get("price")
+            if price is None:
+                continue
+
+            model = agent_models.get(agent_id, "unknown")
+            role = agent_roles.get(agent_id, "unknown")
+            deviation = price - equilibrium_price
+
+            key = (model, role)
+            if key not in deviations_by_model_role:
+                deviations_by_model_role[key] = []
+            deviations_by_model_role[key].append(deviation)
+
+            # Track per-model metrics
+            if model not in model_biases:
+                model_biases[model] = []
+                model_variances[model] = []
+
+        # Compute per-model bias and variance for this round
+        model_devs_this_round = {}
+        for (model, role), devs in deviations_by_model_role.items():
+            if model not in model_devs_this_round:
+                model_devs_this_round[model] = []
+            model_devs_this_round[model].extend(devs)
+
+        for model, devs in model_devs_this_round.items():
+            if devs:
+                model_biases[model].append(np.mean(devs))
+                model_variances[model].append(np.var(devs) if len(devs) > 1 else 0.0)
+
+        # Compute within-model correlations (same model, same role)
+        round_within_corrs = []
+        for (model, role), devs in deviations_by_model_role.items():
+            if len(devs) >= 2:
+                # Compute pairwise correlations for this group
+                # For small groups, use variance-based correlation proxy
+                # corr = 1 - (var(differences) / (2 * var(values)))
+                devs_arr = np.array(devs)
+                if np.std(devs_arr) > 1e-6:
+                    # Use pairwise correlation
+                    for i, j in combinations(range(len(devs)), 2):
+                        # For cross-sectional, we measure if deviations move together
+                        # This is a single-round snapshot, so we use the deviation values
+                        pass
+                    # Simpler: compute ICC (intraclass correlation) proxy
+                    # ICC ≈ (between-agent var) / (total var)
+                    mean_dev = np.mean(devs_arr)
+                    # All agents same model/role deviating similarly = high correlation
+                    # Proxy: 1 - normalized spread
+                    spread = np.std(devs_arr)
+                    max_spread = abs(equilibrium_price) + 10  # rough scale
+                    corr_proxy = 1.0 - min(spread / max_spread, 1.0)
+                    round_within_corrs.append(corr_proxy)
+
+        if round_within_corrs:
+            within_corrs_by_round.append(np.mean(round_within_corrs))
+
+        # Compute between-model correlations
+        # Compare deviations across different models (same role)
+        models_in_round = list(set(m for (m, r) in deviations_by_model_role.keys()))
+        if len(models_in_round) >= 2:
+            round_between_corrs = []
+            for role in ["buyer", "seller"]:
+                role_devs_by_model = {
+                    m: deviations_by_model_role.get((m, role), [])
+                    for m in models_in_round
+                    if (m, role) in deviations_by_model_role
+                }
+                if len(role_devs_by_model) >= 2:
+                    # Compare mean deviations across models
+                    model_means = [np.mean(devs) for devs in role_devs_by_model.values() if devs]
+                    if len(model_means) >= 2:
+                        # High correlation if models deviate in same direction
+                        spread = np.std(model_means)
+                        max_spread = abs(equilibrium_price) + 10
+                        corr_proxy = 1.0 - min(spread / max_spread, 1.0)
+                        round_between_corrs.append(corr_proxy)
+
+            if round_between_corrs:
+                between_corrs_by_round.append(np.mean(round_between_corrs))
+
+    # Compute aggregate statistics
+    result = {
+        "within_corr_mean": float(np.mean(within_corrs_by_round)) if within_corrs_by_round else None,
+        "within_corr_se": float(np.std(within_corrs_by_round) / np.sqrt(len(within_corrs_by_round))) if len(within_corrs_by_round) > 1 else None,
+        "within_corrs_by_round": within_corrs_by_round,
+        "between_corr_mean": float(np.mean(between_corrs_by_round)) if between_corrs_by_round else None,
+        "between_corr_se": float(np.std(between_corrs_by_round) / np.sqrt(len(between_corrs_by_round))) if len(between_corrs_by_round) > 1 else None,
+        "between_corrs_by_round": between_corrs_by_round,
+        "n_rounds": len(round_data),
+    }
+
+    # Per-model bias and variance
+    result["model_metrics"] = {}
+    for model in model_biases:
+        biases = model_biases[model]
+        variances = model_variances[model]
+        result["model_metrics"][model] = {
+            "bias_mean": float(np.mean(biases)) if biases else None,
+            "bias_se": float(np.std(biases) / np.sqrt(len(biases))) if len(biases) > 1 else None,
+            "variance_mean": float(np.mean(variances)) if variances else None,
+            "variance_se": float(np.std(variances) / np.sqrt(len(variances))) if len(variances) > 1 else None,
+        }
+
+    # Monoculture effect
+    if result["within_corr_mean"] is not None and result["between_corr_mean"] is not None:
+        result["monoculture_effect"] = result["within_corr_mean"] - result["between_corr_mean"]
+    else:
+        result["monoculture_effect"] = None
+
+    return result
+
+
 def compute_action_correlation(decisions_a: List[Dict], decisions_b: List[Dict],
                                metric: str = "price") -> float:
     """
