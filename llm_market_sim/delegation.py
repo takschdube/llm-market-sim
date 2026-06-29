@@ -17,7 +17,7 @@ callable and a set of reachable actions.
 """
 from __future__ import annotations
 
-from typing import Callable, Hashable, Iterable, Sequence, Tuple
+from typing import Any, Callable, Dict, Hashable, Iterable, Optional, Sequence, Tuple
 
 Action = Hashable
 Utility = Callable[[Action], float]
@@ -94,3 +94,72 @@ def recertification_count(drifts: Sequence[float], lipschitz: float,
             count += 1
             acc = 0.0
     return count
+
+
+def probe_proxy(proxy: Callable[[Action], Action],
+                reports: Iterable[Action],
+                utility: Utility,
+                *,
+                guardrail: Optional[Callable[[Action], Action]] = None,
+                honest_report: Optional[Action] = None) -> Dict[str, Any]:
+    """Sweep a proxy through a grid of reports and measure the incentive to misreport.
+
+    This is the empirical counterpart of :func:`within_range_regret`, and it works
+    for any report-to-action map: an analytic proxy (a bid-scaling rule) or a
+    language-model proxy (a callable that prompts an LLM with the report and parses
+    an action). It makes one ``proxy`` call per report, so an LLM proxy costs
+    ``len(reports)`` model calls.
+
+    ``proxy`` maps a report to the action the mechanism sees (the principal's only
+    lever is the report). ``reports`` is the grid of self-descriptions to sweep.
+    ``utility`` maps an action to the principal's interim utility with opponents
+    fixed. ``guardrail`` is an optional action-to-action map composed onto the proxy
+    output (a cap, a filter, an alignment layer). ``honest_report`` is the truthful
+    report; it defaults to the middle of ``reports``.
+
+    Returns a dict with ``reachable`` (the (report, action) pairs reached),
+    ``honest_action``, ``within_range_regret`` (best reachable utility minus the
+    honest action's, the gain from misreporting by the truth-to-proxy identity),
+    ``best_report``, ``best_action``, and ``inflation`` = ``best_report /
+    honest_report``, the input/prompt inflation the principal needs to recover the
+    best reachable action.
+    """
+    c = guardrail if guardrail is not None else (lambda a: a)
+    reports = list(reports)
+    if not reports:
+        raise ValueError("reports must be non-empty")
+    if honest_report is None:
+        honest_report = reports[len(reports) // 2]
+    reached = [(r, c(proxy(r))) for r in reports]
+    honest_action = c(proxy(honest_report))
+    best_report, best_action = max(reached, key=lambda ra: utility(ra[1]))
+    within = utility(best_action) - utility(honest_action)
+    inflation = (best_report / honest_report) if honest_report else float("nan")
+    return {
+        "reachable": reached,
+        "honest_action": honest_action,
+        "best_report": best_report,
+        "best_action": best_action,
+        "within_range_regret": float(within),
+        "inflation": float(inflation),
+    }
+
+
+if __name__ == "__main__":
+    # Self-check: an analytic bid-scaling proxy under a soft-cap guardrail.
+    # pi(report) = report / 2; soft cap compresses bids above kappa = 0.3.
+    # True value v = 1.5, so the unconstrained best bid v/2 = 0.75 > kappa: the
+    # guardrail binds, leaving positive within-range regret and inflation > 1.
+    kappa, slope = 0.30, 0.4
+    soft_cap = lambda b: b if b <= kappa else kappa + slope * (b - kappa)
+    v = 1.5
+    util = lambda bid: v * bid - bid * bid          # peak at bid = v/2 = 0.75
+    out = probe_proxy(lambda r: r / 2.0,
+                      reports=[i / 100.0 for i in range(5, 400)],
+                      utility=util,
+                      guardrail=soft_cap,
+                      honest_report=v)
+    assert out["within_range_regret"] > 0, out
+    assert out["inflation"] > 1.0, out
+    print("probe_proxy self-check OK:",
+          {k: round(out[k], 3) for k in ("within_range_regret", "inflation", "best_report")})
