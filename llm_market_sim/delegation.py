@@ -132,7 +132,11 @@ def probe_proxy(proxy: Callable[[Action], Action],
         honest_report = reports[len(reports) // 2]
     reached = [(r, c(proxy(r))) for r in reports]
     honest_action = c(proxy(honest_report))
-    best_report, best_action = max(reached, key=lambda ra: utility(ra[1]))
+    # The principal can always report honestly, so honest is itself a candidate for
+    # the best reachable action; including it makes within_range_regret >= 0 and
+    # inflation >= 1, with equality exactly when honest reporting is already optimal.
+    best_report, best_action = max(reached + [(honest_report, honest_action)],
+                                   key=lambda ra: utility(ra[1]))
     within = utility(best_action) - utility(honest_action)
     inflation = (best_report / honest_report) if honest_report else float("nan")
     return {
